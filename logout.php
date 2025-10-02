@@ -7,8 +7,18 @@ if (session_status() === PHP_SESSION_NONE) {
     session_start();
 }
 
+// Generate a CSRF token if one doesn't exist.
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 // Check if the user has confirmed logout via a POST request.
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
+    // CSRF token validation
+    if (!isset($_POST['_token']) || !isset($_SESSION['csrf_token']) || !hash_equals($_SESSION['csrf_token'], $_POST['_token'])) {
+        die('CSRF token validation failed.');
+    }
+
     // Unset all of the session variables.
     $_SESSION = [];
 
@@ -48,8 +58,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     <div class="w-full max-w-md bg-dark-lighter rounded-lg shadow-lg p-8 text-center">
         <h2 class="text-3xl font-bold text-white mb-4">Are you sure you want to log out?</h2>
         <p class="text-gray-400 mb-6">You will be securely logged out of your account.</p>
-        
+
         <form method="POST" action="logout.php" class="space-y-4">
+            <input type="hidden" name="_token" value="<?php echo htmlspecialchars($_SESSION['csrf_token']); ?>">
             <button type="submit" class="w-full bg-red-600 text-white py-3 px-6 rounded-lg font-semibold hover:bg-red-700 transition-colors">
                 Yes, Log Me Out
             </button>

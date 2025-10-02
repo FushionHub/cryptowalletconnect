@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>CSRF Attack Test</title>
+</head>
+<body onload="document.forms[0].submit()">
+    <h1>Testing CSRF on logout...</h1>
+    <form action="logout.php" method="POST">
+        <!-- This form intentionally lacks the _token field -->
+        <input type="hidden" name="action" value="logout" />
+    </form>
+    <p>If the test is successful, you should see a 'CSRF token validation failed.' message from the server. If you are redirected to the login page, the vulnerability still exists.</p>
+</body>
+</html>
