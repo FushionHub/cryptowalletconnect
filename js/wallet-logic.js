@@ -2,7 +2,22 @@
 // This file handles all client-side wallet interactions using ethers.js.
 
 document.addEventListener('DOMContentLoaded', () => {
-    // UI Elements
+    // --- Constants ---
+    const supportedTokens = [
+        { address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', symbol: 'USDT', decimals: 6 },
+        { address: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48', symbol: 'USDC', decimals: 6 },
+        { address: '0x6B175474E89094C44Da98b954EedeAC495271d0F', symbol: 'DAI', decimals: 18 },
+        { address: '0x95aD61b0a150d79219dCF64E1E6Cc01f0B64C4cE', symbol: 'SHIB', decimals: 18 },
+        { address: '0x7D1AfA7B718fb893dB30A3aBc0C4c608Ac40f80', symbol: 'MATIC', decimals: 18 }
+    ];
+    const erc20Abi = [
+        "function balanceOf(address owner) view returns (uint256)",
+        "function symbol() view returns (string)",
+        "function decimals() view returns (uint8)"
+    ];
+    const provider = new ethers.providers.JsonRpcProvider('https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161');
+
+    // --- UI Elements ---
     const createWalletBtn = document.getElementById('create-wallet-btn');
     const importWalletBtn = document.getElementById('import-wallet-btn');
     const lockWalletBtn = document.getElementById('lock-wallet-btn');
@@ -10,14 +25,15 @@ document.addEventListener('DOMContentLoaded', () => {
     const walletDashboardDiv = document.getElementById('wallet-dashboard');
     const walletAddressEl = document.getElementById('wallet-address');
     const walletBalanceEl = document.getElementById('wallet-balance');
+    const assetListUl = document.getElementById('asset-list');
 
-    // Modals
+    // --- Modals ---
     const modalBackdrop = document.getElementById('modal-backdrop');
     const mnemonicModal = document.getElementById('mnemonic-modal');
     const passwordModal = document.getElementById('password-modal');
     const importModal = document.getElementById('import-modal');
 
-    // Modal Controls
+    // --- Modal Controls ---
     const mnemonicPhraseEl = document.getElementById('mnemonic-phrase');
     const mnemonicConfirmBtn = document.getElementById('mnemonic-confirm-btn');
     const passwordModalTitle = document.getElementById('password-modal-title');
@@ -29,98 +45,74 @@ document.addEventListener('DOMContentLoaded', () => {
     const importCancelBtn = document.getElementById('import-cancel-btn');
     const importConfirmBtn = document.getElementById('import-confirm-btn');
 
-    // Ethers.js provider
-    const provider = new ethers.providers.JsonRpcProvider('https://mainnet.infura.io/v3/9aa3d95b3bc440fa88ea12eaa4456161'); // Using a public Infura endpoint
+    // --- State ---
     let currentWallet;
-    let resolvePassword; // To handle password promise
+    let resolvePassword;
 
     // --- Main Logic ---
-
-    // Check for an existing wallet on page load
     checkForExistingWallet();
 
     // --- Event Listeners ---
-
     createWalletBtn.addEventListener('click', handleCreateWallet);
     importWalletBtn.addEventListener('click', showImportModal);
     lockWalletBtn.addEventListener('click', lockWallet);
-
-    // Close modals when backdrop is clicked or with cancel buttons
     modalBackdrop.addEventListener('click', () => {
         hideAllModals();
-        if (resolvePassword) resolvePassword(null); // Cancel password entry
+        if (resolvePassword) resolvePassword(null);
     });
     importCancelBtn.addEventListener('click', hideAllModals);
     importConfirmBtn.addEventListener('click', handleImportWallet);
 
-
     // --- Functions ---
-
     function checkForExistingWallet() {
-        const encryptedWalletJSON = localStorage.getItem('encryptedWallet');
-        if (encryptedWalletJSON) {
+        if (localStorage.getItem('encryptedWallet')) {
             showUnlockWallet();
         }
     }
 
     async function showUnlockWallet() {
-        const title = "Unlock Wallet";
-        const prompt = "Please enter your password to unlock your wallet.";
-        const password = await getPassword(title, prompt);
-
+        const password = await getPassword("Unlock Wallet", "Please enter your password to unlock your wallet.");
         if (password) {
             try {
                 const encryptedJSON = localStorage.getItem('encryptedWallet');
                 currentWallet = await ethers.Wallet.fromEncryptedJson(encryptedJSON, password);
                 currentWallet = currentWallet.connect(provider);
-                console.log("Wallet unlocked successfully.");
                 showDashboard();
             } catch (err) {
-                console.error("Failed to unlock wallet:", err);
                 alert("Wrong password or corrupted wallet file.");
-                localStorage.removeItem('encryptedWallet'); // Clear corrupted wallet
+                localStorage.removeItem('encryptedWallet');
                 showSetup();
             }
         }
     }
 
     async function handleCreateWallet() {
-        try {
-            const newWallet = ethers.Wallet.createRandom();
-            showMnemonicModal(newWallet.mnemonic.phrase);
-            mnemonicConfirmBtn.onclick = async () => {
-                hideAllModals();
-                const password = await getPassword("Create Password", "Create a password to encrypt your new wallet.");
-                if (password) {
-                    const encryptedJson = await newWallet.encrypt(password);
-                    localStorage.setItem('encryptedWallet', encryptedJson);
-                    currentWallet = newWallet.connect(provider);
-                    console.log("Wallet created and encrypted successfully.");
-                    showDashboard();
-                }
-            };
-        } catch (error) {
-            console.error("Error creating wallet:", error);
-            alert("An error occurred while creating the wallet. Please try again.");
-        }
+        const newWallet = ethers.Wallet.createRandom();
+        showMnemonicModal(newWallet.mnemonic.phrase);
+        mnemonicConfirmBtn.onclick = async () => {
+            hideAllModals();
+            const password = await getPassword("Create Password", "Create a password to encrypt your new wallet.");
+            if (password) {
+                const encryptedJson = await newWallet.encrypt(password);
+                localStorage.setItem('encryptedWallet', encryptedJson);
+                currentWallet = newWallet.connect(provider);
+                showDashboard();
+            }
+        };
     }
 
     async function handleImportWallet() {
         const mnemonic = importMnemonicInput.value.trim();
         if (!ethers.utils.isValidMnemonic(mnemonic)) {
-            alert("Invalid recovery phrase. Please check your words and try again.");
-            return;
+            return alert("Invalid recovery phrase.");
         }
-
         const importedWallet = ethers.Wallet.fromMnemonic(mnemonic);
         hideAllModals();
-
         const password = await getPassword("Create Password", "Create a password to encrypt your imported wallet.");
         if (password) {
             const encryptedJson = await importedWallet.encrypt(password);
             localStorage.setItem('encryptedWallet', encryptedJson);
             currentWallet = importedWallet.connect(provider);
-            console.log("Wallet imported and encrypted successfully.");
             showDashboard();
         }
     }
@@ -128,22 +120,50 @@ document.addEventListener('DOMContentLoaded', () => {
     function lockWallet() {
         currentWallet = null;
         showSetup();
-        console.log("Wallet locked.");
     }
 
     async function showDashboard() {
         if (!currentWallet) return;
-
         walletSetupDiv.classList.add('hidden');
         walletDashboardDiv.classList.remove('hidden');
         walletAddressEl.innerText = currentWallet.address;
-
         try {
             const balance = await currentWallet.getBalance();
             walletBalanceEl.innerText = `${ethers.utils.formatEther(balance)} ETH`;
+            updateTokenBalances(); // Fetch and display token balances
         } catch (error) {
-            console.error("Could not fetch balance:", error);
             walletBalanceEl.innerText = "Error fetching balance";
+        }
+    }
+
+    async function updateTokenBalances() {
+        if (!currentWallet) return;
+        assetListUl.innerHTML = '<li>Loading token balances...</li>'; // Show loading state
+        let balancesFound = false;
+
+        const balancePromises = supportedTokens.map(async (token) => {
+            try {
+                const tokenContract = new ethers.Contract(token.address, erc20Abi, provider);
+                const balance = await tokenContract.balanceOf(currentWallet.address);
+                if (balance.gt(0)) {
+                    balancesFound = true;
+                    const formattedBalance = ethers.utils.formatUnits(balance, token.decimals);
+                    return `<li class="py-2 flex justify-between items-center"><span>${token.symbol}</span><span class="font-mono">${Number(formattedBalance).toFixed(4)}</span></li>`;
+                }
+                return null;
+            } catch (error) {
+                console.error(`Could not fetch balance for ${token.symbol}:`, error);
+                return null;
+            }
+        });
+
+        const results = await Promise.all(balancePromises);
+        const validResults = results.filter(r => r !== null);
+
+        if (validResults.length > 0) {
+            assetListUl.innerHTML = validResults.join('');
+        } else {
+            assetListUl.innerHTML = '<li class="py-2 text-gray-500">No token balances found.</li>';
         }
     }
 
@@ -152,9 +172,8 @@ document.addEventListener('DOMContentLoaded', () => {
         walletSetupDiv.classList.remove('hidden');
         walletAddressEl.innerText = "";
         walletBalanceEl.innerText = "";
+        assetListUl.innerHTML = '<li class="py-2"><p>This is a placeholder. Asset list will be dynamically generated here.</p></li>';
     }
-
-    // --- Modal Management ---
 
     function showImportModal() {
         importMnemonicInput.value = "";
@@ -174,16 +193,13 @@ document.addEventListener('DOMContentLoaded', () => {
             passwordModalTitle.innerText = title;
             passwordModalPrompt.innerText = prompt;
             passwordInput.value = "";
-
             modalBackdrop.classList.remove('hidden');
             passwordModal.classList.remove('hidden');
             passwordInput.focus();
-
             passwordConfirmBtn.onclick = () => {
                 hideAllModals();
                 resolve(passwordInput.value);
             };
-
             passwordCancelBtn.onclick = () => {
                 hideAllModals();
                 resolve(null);
