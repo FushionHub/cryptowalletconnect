@@ -23,6 +23,7 @@ if (!isset($_SESSION['user_id'])) {
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>My Wallet</title>
+    <script src="https://cdn.ethers.io/lib/ethers-5.2.umd.min.js" type="application/javascript"></script>
     <script src="https://cdn.tailwindcss.com"></script>
     <style>
         /* Basic styling for the wallet interface */
@@ -98,5 +99,6 @@ if (!isset($_SESSION['user_id'])) {
     <!-- - Creating and signing transactions. -->
     <!-- =================================================================== -->
 
+    <script src="js/wallet-logic.js"></script>
 </body>
 </html>
